@@ -7,22 +7,38 @@
 //
 
 import UIKit
+import CoreData
 
 class ToDoListViewController: UITableViewController {
     
     var itemArray = [Item]()
+    var selectedCategory : Category? {
+        
+        didSet {
+            
+            loadItems()
+            
+        }
+    }
+    
     
     //ユーザーデフォルト
-    let defaults = UserDefaults.standard
-    let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Items.plist")
+//    let defaults = UserDefaults.standard
+//    let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Items.plist")
+    let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
+    
+    //もしかしたらこれが影響してエラーになるかも？
+    let request : NSFetchRequest<Item> = Item.fetchRequest()
     
 
     override func viewDidLoad() {
         super.viewDidLoad()
-       
-        print(dataFilePath)
         
-        loadItems()
+        print(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask))
+        
+        //print(dataFilePath)
+       
+        //loadItems(with: request)
         //アプリが立ち上がるたびにユーザーデフォルトからキー値を基にして取り出す
        //必要がある
         
@@ -84,7 +100,12 @@ class ToDoListViewController: UITableViewController {
     //選択しているセルの番号を表示させることができる
     //セルが選択された場合に処理したい内容をこの関数の中に記述していく
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        print(itemArray[indexPath.row])
+        //print(itemArray[indexPath.row])
+        
+        //itemArrayの方から先に取り除いてしまうと、contextから削除されなくなるため、順番に注意する
+        //この２つのコードを追加した状態だと、タップした場合に削除するという動きになる
+//        context.delete(itemArray[indexPath.row])
+//        itemArray.remove(at: indexPath.row)
         
         //この１行で、チェックがついていれば外して、チェックがついていなければつけることを表している
         itemArray[indexPath.row].done = !itemArray[indexPath.row].done
@@ -126,18 +147,18 @@ class ToDoListViewController: UITableViewController {
         let action = UIAlertAction(title: "Add Item", style: .default) { (action) in
             print("success")
             
-            //print(textField.text!)
-            
-            let newItem = Item()
+            //クロージャーの中に入っているため、selfをつける必要がある
+            let newItem = Item(context: self.context)
             newItem.title = textField.text!
-            
+            newItem.done = false
+            newItem.parentCategory = self.selectedCategory
             self.itemArray.append(newItem)
+            
+            //self.itemArray.append(newItem)
             self.saveItems()
             
             //UserDefaultsに追加する
             //self.defaults.set(self.itemArray, forKey: "ToDoListArray")
-            
-            
             
         }
         
@@ -157,41 +178,108 @@ class ToDoListViewController: UITableViewController {
     //データを保存している
     func saveItems() {
         
-        let encoder = PropertyListEncoder()
+        //let encoder = PropertyListEncoder()
         
         do {
             
-            let data = try encoder.encode(itemArray)
-            try data.write(to: dataFilePath!)
+            
+            try context.save()
+            
+//
+//            let data = try encoder.encode(itemArray)
+//            try data.write(to: dataFilePath!)
             
         } catch {
-            
-            print("Error encoding item array, \(error)")
+            print("Error saving context \(error)")
+//            print("Error encoding item array, \(error)")
             
         }
         
         //テーブルに反映するためにはし再度読み込み直す必要がある
         self.tableView.reloadData()
         
-        
-        
     }
     
     //保存されたデータを取り出している
-    func loadItems() {
+    func loadItems(with request: NSFetchRequest<Item> = Item.fetchRequest(), predicate: NSPredicate? = nil) {
         
-        if let data = try? Data(contentsOf: dataFilePath!) {
-            
-            let decoder = PropertyListDecoder()
-            
-            do{
-            itemArray = try decoder.decode([Item].self, from: data)
+        //parentCategoryが同じセルが呼び出されている
+        let categoryPredicate = NSPredicate(format: "parentCategory.name MATCHES %@",selectedCategory!.name!)
         
-            } catch {
-                print("Error decoding item array, \(error)")
-            }
-     }
+        if let additionalPredicate = predicate{
+            
+            request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [categoryPredicate, additionalPredicate])
+            
+        } else {
+            
+            request.predicate =  categoryPredicate
+        }
+        
+//        let compoundPredicate = NSCompoundPredicate(andPredicateWithSubpredicates: [categoryPredicate, predicate])
+//
+//        request.predicate = compoundPredicate
+        
+        //NSFetchRequest<Item>と特定してあげないとエラーになってしまう
+        //let request: NSFetchRequest<Item> = Item.fetchRequest()
+        do {
+            
+        itemArray = try context.fetch(request)
+            
+        } catch {
+            
+        print("Error  fetching data from context")
     
     }
-
+        
+        tableView.reloadData()
+        
+  }
+    
 }
+
+//Mark: - Search bar methods
+//extensionを使用することで、今あるクラスを拡張して使うことができる
+//クラスの外側に記述する
+//検索バーについて定義している
+extension ToDoListViewController : UISearchBarDelegate {
+    
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        
+        let request : NSFetchRequest<Item> = Item.fetchRequest()
+        
+        let predicate = NSPredicate(format: "title CONTAINS[cd]  %@", searchBar.text!)
+        
+        request.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
+        
+        loadItems(with: request, predicate: predicate)
+        
+//        do {
+//            itemArray = try context.fetch(request)
+//        } catch {
+//            print("Error  fetching data from context")
+//
+//        }
+        
+        //これを入れてあげないとクラッシュしてしまう！！！！
+        //tableView.reloadData()
+    }
+    
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        if searchBar.text?.count == 0 {
+            
+            loadItems()
+            
+            //非同期処理について
+            //キーボードを非表示にすることができる
+            DispatchQueue.main.async {
+                
+                searchBar.resignFirstResponder()
+                
+            }
+            
+        }
+        
+    }
+    
+}
+
