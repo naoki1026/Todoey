@@ -1,15 +1,18 @@
 //
-//  item.swift
+//  Item.swift
 //  Todoey
 //
-//  Created by Naoki Arakawa on 2019/03/10.
+//  Created by Naoki Arakawa on 2019/03/12.
 //  Copyright © 2019 Naoki Arakawa. All rights reserved.
 //
 
 import Foundation
+import RealmSwift
 
-//このcodableの中にはencodableとdecodableの意味が含まれている
-class Item : Codable {
-    var title: String = ""
-    var done: Bool = false
+class Item: Object {
+    
+    @objc dynamic var title: String = ""
+    @objc dynamic var done: Bool = false
+    @objc dynamic var dateCreated: Date?
+    var parentCategories = LinkingObjects(fromType: Category.self, property: "items")
 }

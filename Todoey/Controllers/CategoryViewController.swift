@@ -7,14 +7,27 @@
 //
 
 import UIKit
-import CoreData
+
+//-Realmで変更
+import RealmSwift
+
 
 
 class CategoryViewController: UITableViewController {
     
-    var categories = [Category]()
-    let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
-    let request : NSFetchRequest<Category> = Category.fetchRequest()
+    //-Realmで変更
+    //イニシャライズしている
+    let realm = try! Realm()
+    
+    //-Realmで変更
+    //var categories = [Category]()
+    //Result型と定義している
+    //?はオプショナルで、安全のためにつけている
+    var categories: Results<Category>?
+    
+    //-Realmで不要
+    //let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
+    //let request : NSFetchRequest<Category> = Category.fetchRequest()
     
     
     
@@ -29,7 +42,8 @@ class CategoryViewController: UITableViewController {
     //Table View Datasource Methods
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         
-        return categories.count
+        //もしnilだった場合に１を返す
+        return categories?.count ?? 1
         
     }
     
@@ -41,8 +55,9 @@ class CategoryViewController: UITableViewController {
         
         //このCategoryCellの部分を変更してあげないとクラッシュしてしまう
         let cell = tableView.dequeueReusableCell(withIdentifier: "CategoryCell", for: indexPath)
-        let category = categories[indexPath.row]
-        cell.textLabel?.text = category.name
+        
+        //categoriesの後ろの？の意味は、categoriesがnilではない場合にそれ以降を返すという意味らしい
+        cell.textLabel?.text = categories?[indexPath.row].name ?? "No categories added"
         return cell
         
     }
@@ -62,35 +77,46 @@ class CategoryViewController: UITableViewController {
         
         if let indexPath = tableView.indexPathForSelectedRow {
             
-            destinationVC.selectedCategory = categories[indexPath.row]
+            destinationVC.selectedCategory = categories?[indexPath.row]
             
         }
     }
     
     //データを保存している
-    func saveCategories() {
+    func save(category: Category) {
         
         do {
-            try context.save()
+            
+            try realm.write {realm.add(category)}
+  
         } catch {
+            
             print("Error saving context \(error)")
         }
+        
         self.tableView.reloadData()
     }
     
     //保存されたデータを取り出している
+    //-Realmで変更
     func loadCategories() {
         
-        do {
-            
-            categories = try context.fetch(request)
-            
-        } catch {
-            
-            print("Error  fetching data from context")
-            
-        }
+       //この１行でrealmに保存されている全てのデータを取り出すことができる
+      //categoriesのプロパティの中に、Categoryに保有しているデータを全て取ってくる
+       categories = realm.objects(Category.self)
         
+//    let request : NSFetchRequest<Category> = Category.fetchRequest()
+//
+//        do {
+//
+//            categories = try context.fetch(request)
+//
+//        } catch {
+//
+//            print("Error  fetching data from context")
+//
+//        }
+
         tableView.reloadData()
     }
 
@@ -101,11 +127,16 @@ class CategoryViewController: UITableViewController {
         let alert = UIAlertController(title: "Add New Category", message: "", preferredStyle: .alert)
         let action = UIAlertAction(title: "Add Category", style: .default) { (action) in
             print("success")
-            let newCategory = Category(context: self.context)
+            
+            //-Realmで追加
+            let newCategory = Category()
             newCategory.name = textField.text!
             
-            self.categories.append(newCategory)
-            self.saveCategories()
+            //-Realmで変更、自動的に追加されるため記述する必要はない
+            //self.categories.append(newCategory)
+            
+            //-Realmで変更
+            self.save(category: newCategory)
         
        }
     
