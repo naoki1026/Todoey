@@ -9,12 +9,17 @@
 import UIKit
 import RealmSwift
 //import CoreData
+//import SwipeCellKit
+import ChameleonFramework
 
-class ToDoListViewController: UITableViewController {
+class ToDoListViewController: SwipeTableViewController {
     
     var todoItems : Results<Item>?
     //var todoItems = [Item]()
     let realm = try! Realm()
+    
+    @IBOutlet weak var searchBar: UISearchBar!
+    
     
     var selectedCategory : Category? {
         
@@ -23,7 +28,6 @@ class ToDoListViewController: UITableViewController {
             
         }
     }
-    
     
     //ユーザーデフォルト
 //    let defaults = UserDefaults.standard
@@ -37,8 +41,10 @@ class ToDoListViewController: UITableViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         
+        
         print(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask))
         
+
         //print(dataFilePath)
        
         //loadItems(with: request)
@@ -48,10 +54,53 @@ class ToDoListViewController: UITableViewController {
         //if let items = defaults.array(forKey: "ToDoListArray") as? [String] {
         //todoItems = items
        //}
-    
+        tableView.separatorStyle = .none
+        
+        
     }
     
+    //viewDidLoatの後に処理される
+    override func viewWillAppear(_ animated: Bool) {
+        
+           title = selectedCategory!.name
+        
+        guard let colorHex = selectedCategory?.color else  { fatalError("Navigation controller does not exist")}
+        
+        updateNavBar(withHexCode: colorHex)
 
+//            //もしもnavigationController?.navigationBarがnilだった場合にエラーを表示する
+//            guard let navBar = navigationController?.navigationBar else {fatalError("Navigaton controller does not exist.")}
+        
+                
+            }
+    
+    //ここで色が戻る
+    override func viewWillDisappear(_ animated: Bool) {
+        
+        //guard let originalColor = UIColor(hexString: "1D9BF6") else
+            //{fatalError()}
+        
+        updateNavBar(withHexCode: "1D9BF6")
+//        navigationController?.navigationBar.barTintColor = originalColor
+//        navigationController?.navigationBar.tintColor = FlatWhite()
+//        navigationController?.navigationBar.largeTitleTextAttributes = [NSAttributedString.Key.foregroundColor: FlatWhite()]
+        
+    }
+    
+    func updateNavBar(withHexCode colorHexCode: String){
+        
+        //もしもnavigationController?.navigationBarがnilだった場合にエラーを表示する
+        guard let navBar = navigationController?.navigationBar else {fatalError("Navigaton controller does not exist.")}
+        
+        guard let navBarColor = UIColor(hexString: colorHexCode)  else { fatalError()}
+        
+        navBar.barTintColor = navBarColor
+        navBar.tintColor = ContrastColorOf(navBarColor, returnFlat: true)
+        navBar.largeTitleTextAttributes = [NSAttributedString.Key.foregroundColor : ContrastColorOf(navBarColor, returnFlat: true) ]
+        searchBar.barTintColor = navBarColor
+        
+    }
+    
     //Mart - TableView Datasource Methods
     //セクションの中のセルの数で、配列の分だけセルを返すためresultArray.countを返す
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -65,17 +114,41 @@ class ToDoListViewController: UITableViewController {
         return 1
     }
     
+//    override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+//        let cell = tableView.dequeueReusableCell(withIdentifier: "Cell") as! SwipeTableViewCell
+//        cell.delegate = self
+//        return cell
+//    }
+    
+    
     // セルを生成して返却するメソッドで、セルの数だけ呼び出される。
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         
         //dequeueReusableCellを呼び出すことで、セルが再び表示された際に画面上からセルに対して処理した内容が反映された上で表示される
-        let cell = tableView.dequeueReusableCell(withIdentifier: "ToDoItemCell", for: indexPath)
+        //let cell = tableView.dequeueReusableCell(withIdentifier: "ToDoItemCell", for: indexPath) as! SwipeTableViewCell
+        
+        //オーバーライドを使用して、スーパークラスで定義されているプロパティやメソッドをサブクラスで再定義している
+        let cell = super.tableView(tableView, cellForRowAt: indexPath)
         
         if  let item = todoItems?[indexPath.row]  {
             
             //セルの数だけ配列を出してあげる必要がある
             //ここでタイトルを取り出してあげる
             cell.textLabel?.text = item.title
+            
+            if let color = UIColor(hexString: selectedCategory!.color)?.darken(byPercentage:CGFloat(indexPath.row) / CGFloat(todoItems!.count)) {
+                cell.backgroundColor = color
+                
+                //テキストの色がセルの色と逆になる
+                cell.textLabel?.textColor = ContrastColorOf(color, returnFlat: true)
+            }
+            
+            //CGFloatでそれぞれを囲んであげないといけない
+            print("version 1 :  \(CGFloat(indexPath.row / todoItems!.count))")
+            print("version 2 :  \(CGFloat(indexPath.row) / CGFloat(todoItems!.count))")
+            
+            
+            
             
             //Tenary operator
             //value = condition ? valueTrue : valueFalse
@@ -292,20 +365,40 @@ class ToDoListViewController: UITableViewController {
 
   }
     
+    override func updateModel(at indexPath: IndexPath) {
+        
+        if let item = todoItems?[indexPath.row] {
+            
+            do {
+                
+                try self.realm.write {
+                    
+                    self.realm.delete(item)}
+                
+            } catch {
+                
+                print("Error deleting category, \(error)")
+                
+            }
+        }
+    }
+    
 }
+
+
 
 //Mark: - Search bar methods
 //extensionを使用することで、今あるクラスを拡張して使うことができる
 //クラスの外側に記述する
 //検索バーについて定義している
 extension ToDoListViewController : UISearchBarDelegate {
-    
+
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
-        
+
         //todoItems = todoItems?.filter("title CONTAINS[cd] %@", searchBar.text!).sorted(byKeyPath: "title", ascending: true)
         todoItems = todoItems?.filter("title CONTAINS[cd] %@", searchBar.text!).sorted(byKeyPath: "dateCreated", ascending: true)
         tableView.reloadData()
-        
+
 //        let request : NSFetchRequest<Item> = Item.fetchRequest()
 //
 //        let predicate = NSPredicate(format: "title CONTAINS[cd]  %@", searchBar.text!)
@@ -313,32 +406,33 @@ extension ToDoListViewController : UISearchBarDelegate {
 //        request.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
 //
 //        loadItems(with: request, predicate: predicate)
-        
+
 //        do {
 //            todoItems = try context.fetch(request)
 //        } catch {
 //            print("Error  fetching data from context")
 //
 //        }
-        
+
         //これを入れてあげないとクラッシュしてしまう！！！！
         //tableView.reloadData()
     }
-    
+
     func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
         if searchBar.text?.count == 0 {
             loadItems()
-            
+
             //非同期処理について
             //キーボードを非表示にすることができる
             DispatchQueue.main.async {
                 searchBar.resignFirstResponder()
-                
+
             }
-            
+
         }
-        
+
     }
-    
+
+
 }
 
